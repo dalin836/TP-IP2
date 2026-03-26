@@ -12,10 +12,13 @@ import { TaskService } from './task.service';
 @Controller('tasks')
 export class TasksController {
   constructor(private readonly taskService: TaskService) {}
-
+  @Get('/')
+  getAllTasks() {
+    return this.taskService.getAllTasks();
+  }
   @Get('/:id')
   getTask(@Param('id') id: string) {
-    return this.taskService.getTask(id);
+    return this.taskService.getTask(Number(id));
   }
   @Post('/')
   createTask(@Body() body: any) {
@@ -24,16 +27,16 @@ export class TasksController {
 
   @Patch('/:id/done')
   markTaskAsDone(@Body() body: any, @Param('id') id: string) {
-    return this.taskService.updateTask(id, body);
+    return this.taskService.updateTask(Number(id), body);
   }
 
   @Patch('/:id/pending')
   markTaskAsPending(@Body() body: any, @Param('id') id: string) {
-    return this.taskService.updateTask(id, body);
+    return this.taskService.updateTask(Number(id), body);
   }
 
   @Delete('/:id')
   deleteTask(@Param('id') id: string) {
-    return this.taskService.deleteTask(id);
+    return this.taskService.deleteTask(Number(id));
   }
 }
