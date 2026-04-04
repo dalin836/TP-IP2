@@ -2,6 +2,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Receipt } from './database/entities/recipts.entity';
 import { Module } from '@nestjs/common';
 import { ReceiptsModule } from './receipts/receipts.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { OrdersModule } from './orders/orders.module';
+import { CoreModule } from './core/core.module';
 
 @Module({
   imports: [
@@ -14,13 +17,16 @@ import { ReceiptsModule } from './receipts/receipts.module';
         password: '123',
         database: 'tp2_recipts',
         entities: [Receipt],
-        autoLoadEntities: true,
+        // autoLoadEntities: true,
         synchronize: true,
       }),
     }),
 
     TypeOrmModule.forFeature([Receipt]), // ✅ comma fixed
     ReceiptsModule,
+    NotificationsModule,
+    OrdersModule,
+    CoreModule,
   ],
 })
 export class AppModule {}
