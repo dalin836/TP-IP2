@@ -5,7 +5,7 @@ import { CategoryType } from './category.type';
 @ObjectType()
 export class ProductType {
   @Field(() => ID)
-  id: number;
+  id: number | undefined;
 
   @Field()
   name: string;
