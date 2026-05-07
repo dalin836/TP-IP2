@@ -1,21 +1,18 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+// src/common/guards/api-key.guard.ts
+import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { GqlExecutionContext } from '@nestjs/graphql';
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const req = context.switchToHttp().getRequest();
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    const apiKey = req.headers['x-api-key'];
+    // ✅ Convert to GraphQL context
+    const ctx = GqlExecutionContext.create(context);
+    const req = ctx.getContext().req;
 
-    if (apiKey !== 'itc-123') {
-      throw new UnauthorizedException('Invalid API key');
-    }
-    return true;
+    // Now req.headers is defined
+    const apiKey = req.headers['x-api-key'];
+    return apiKey === 'my-secret-key'; // replace with your logic
   }
 }
