@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { apolloClient } from '@/apollo/client'
-import { GET_TODOS, ADD_TODO, TOGGLE_TODO, DELETE_TODO, TODOS_SUB } from '@/graphql/todos'
+import {
+  GET_TODOS,
+  ADD_TODO,
+  TOGGLE_TODO,
+  DELETE_TODO,
+  TODOS_SUB
+} from '@/graphql/todos'
 
 export type Todo = {
   id: string
@@ -15,15 +21,23 @@ export const useTodoStore = defineStore('todo', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  /**
+   * ======================
+   * FETCH TODOS
+   * ======================
+   */
   async function fetchTodos() {
     loading.value = true
     error.value = null
+
     try {
-      const { data } = await apolloClient.query<{ todos: Todo[] }>({
+      const { data } = await apolloClient.query<{ todo: Todo[] }>({
         query: GET_TODOS,
-        fetchPolicy: 'network-only', // keep it simple for students
+        fetchPolicy: 'network-only',
       })
-      todos.value = data.todos
+
+      // IMPORTANT: clone to avoid frozen Apollo objects
+      todos.value = (data?.todo ?? []).map(t => ({ ...t }))
     } catch (e: any) {
       error.value = e.message ?? 'Failed to load todos'
     } finally {
@@ -31,125 +45,122 @@ export const useTodoStore = defineStore('todo', () => {
     }
   }
 
+  /**
+   * ======================
+   * ADD TODO (OPTIMISTIC)
+   * ======================
+   */
   async function addTodo(title: string) {
     const clean = title.trim()
     if (!clean) return
 
-    // await apolloClient.mutate({
-    //   mutation: ADD_TODO,
-    //   variables: { title: clean },
-    // })
     const tempTodo: Todo = {
       id: crypto.randomUUID(),
       title: clean,
       is_done: false,
       created_at: new Date().toISOString(),
-    } 
-    // show immediately
-  todos.value.unshift(tempTodo)
-
-  try {
-    const { data } = await apolloClient.mutate({
-      mutation: ADD_TODO,
-      variables: { title: clean },
-    })
-
-    // replace temp todo with real todo
-    const index = todos.value.findIndex(
-      todo => todo.id === tempTodo.id
-    )
-
-    if (index !== -1 && data?.insert_todos_one) {
-      todos.value[index] = data.insert_todos_one
     }
 
-    } catch (e) {
-      // rollback if failed
-      todos.value = todos.value.filter(
-        todo => todo.id !== tempTodo.id
+    // ❌ no unshift (causes extensibility error in some cases)
+    todos.value = [tempTodo, ...todos.value]
+
+    try {
+      const { data } = await apolloClient.mutate({
+        mutation: ADD_TODO,
+        variables: {
+          title: clean,
+          is_done: false,
+        },
+      })
+
+      const serverTodo = data?.insert_todo_one
+
+      if (!serverTodo) return
+
+      // replace temp with server result (clone it)
+      todos.value = todos.value.map(t =>
+        t.id === tempTodo.id ? { ...serverTodo } : t
       )
 
-      console.error('Add failed', e)
+    } catch (e) {
+      // rollback
+      todos.value = todos.value.filter(t => t.id !== tempTodo.id)
+      console.error('Add failed:', e)
     }
-
-    // await fetchTodos()
   }
 
+  /**
+   * ======================
+   * TOGGLE TODO
+   * ======================
+   */
   async function toggleTodo(todo: Todo) {
-    // await apolloClient.mutate({
-    //   mutation: TOGGLE_TODO,
-    //   variables: { id: todo.id, done: !todo.is_done },
-    // })
-    // await fetchTodos()
-
     const oldValue = todo.is_done
+    const newValue = !oldValue
 
-  // instant UI update
-  todo.is_done = !todo.is_done
+    // local update (safe because it's reactive state)
+    todo.is_done = newValue
 
-  try {
-    await apolloClient.mutate({
-      mutation: TOGGLE_TODO,
-      variables: {
-        id: todo.id,
-        done: todo.is_done,
-      },
-    })
+    try {
+      await apolloClient.mutate({
+        mutation: TOGGLE_TODO,
+        variables: {
+          id: todo.id,
+          done: newValue,
+        },
+      })
     } catch (e) {
-      // rollback if failed
+      // rollback
       todo.is_done = oldValue
-
       console.error('Toggle failed', e)
     }
   }
 
+  /**
+   * ======================
+   * DELETE TODO
+   * ======================
+   */
   async function deleteTodo(id: string) {
-    // await apolloClient.mutate({
-    //   mutation: DELETE_TODO,
-    //   variables: { id },
-    // })
-    // await fetchTodos()
+    const backup = [...todos.value]
 
-     // backup
-  const oldTodos = [...todos.value]
+    todos.value = todos.value.filter(t => t.id !== id)
 
-  // remove immediately
-  todos.value = todos.value.filter(
-    todo => todo.id !== id
-  )
-
-  try {
+    try {
       await apolloClient.mutate({
         mutation: DELETE_TODO,
         variables: { id },
       })
     } catch (e) {
-      // rollback if failed
-      todos.value = oldTodos
-
+      todos.value = backup
       console.error('Delete failed', e)
     }
   }
 
-  // Optional: realtime updates (subscription)
- function startRealtime() {
-  const observable = apolloClient.subscribe({
-    query: TODOS_SUB
-  })
+  /**
+   * ======================
+   * REALTIME SUBSCRIPTION
+   * ======================
+   */
+  function startRealtime() {
+    const observable = apolloClient.subscribe({
+      query: TODOS_SUB,
+    })
 
-  const sub = observable.subscribe(
-    ({ data }) => {
-      if (data?.todos) {
-        todos.value = data.todos
+    const sub = observable.subscribe({
+      next({ data }) {
+        if (data?.todo) {
+          // clone to avoid frozen objects
+          todos.value = data.todo.map((t: Todo) => ({ ...t }))
+        }
+      },
+      error(err) {
+        console.error('Subscription error:', err)
       }
-    },
-    (error) => {
-      console.error('Subscription error:', error)
-    }
-  )
+    })
 
-  return () => sub.unsubscribe()
-}
+    return () => sub.unsubscribe()
+  }
 
   return {
     todos,

@@ -1,54 +1,70 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount , computed} from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useTodoStore } from '@/stores/todo.store'
 import { Plus, Trash2, Check } from 'lucide-vue-next'
 
 const store = useTodoStore()
 const title = ref('')
-//filter
+
+// filter state
 const filter = ref<'all' | 'active' | 'done'>('all')
-let stopRealtime: null | (() => void) = null
 
-//filter
+// realtime cleanup
+let stopRealtime: (() => void) | undefined
+
+/**
+ * ======================
+ * FILTERED TODOS
+ * ======================
+ */
 const filteredTodos = computed(() => {
-  switch (filter.value) {
-    case 'active':
-      return store.todos.filter(todo => !todo.is_done)
-
-    case 'done':
-      return store.todos.filter(todo => todo.is_done)
-
-    default:
-      return store.todos
-  }
+  return store.todos.filter(todo => {
+    if (filter.value === 'active') return !todo.is_done
+    if (filter.value === 'done') return todo.is_done
+    return true
+  })
 })
 
+/**
+ * ======================
+ * STATS
+ * ======================
+ */
 const totalTodos = computed(() => store.todos.length)
 
-const activeTodos = computed(
-  () => store.todos.filter(todo => !todo.is_done).length
+const activeTodos = computed(() =>
+  store.todos.filter(t => !t.is_done).length
 )
 
-const doneTodos = computed(
-  () => store.todos.filter(todo => todo.is_done).length
+const doneTodos = computed(() =>
+  store.todos.filter(t => t.is_done).length
 )
-//
+
+/**
+ * ======================
+ * LIFECYCLE
+ * ======================
+ */
 onMounted(async () => {
   await store.fetchTodos()
   stopRealtime = store.startRealtime()
 })
 
-onBeforeUnmount(() => stopRealtime?.())
+onBeforeUnmount(() => {
+  stopRealtime?.()
+})
 
+/**
+ * ======================
+ * ADD TODO
+ * ======================
+ */
 async function add() {
-  if (!title.value.trim()) return
+  if (!title.value.trim() || store.loading) return
 
   await store.addTodo(title.value)
-
   title.value = ''
 }
-
-
 </script>
 
 <template>
@@ -57,45 +73,63 @@ async function add() {
 
       <h1 class="title">📝 Todo App</h1>
 
-      <!-- Input -->
+      <!-- INPUT -->
       <div class="input-group">
         <input
           v-model="title"
           placeholder="Write a new task..."
           class="input"
           @keyup.enter="add"
+          :disabled="store.loading"
         />
 
-        <button class="btn-add" @click="add">
+        <button
+          class="btn-add"
+          @click="add"
+          :disabled="store.loading"
+        >
           <Plus :size="18" />
         </button>
       </div>
 
-      <!-- Filters - Challenge 1 !-->
+      <!-- FILTERS -->
       <div class="filters">
-        <button @click="filter = 'all'">All</button>
-        <button @click="filter = 'active'">Active</button>
-        <button @click="filter = 'done'">Done</button>
+        <button :class="{ active: filter === 'all' }" @click="filter = 'all'">
+          All
+        </button>
+        <button :class="{ active: filter === 'active' }" @click="filter = 'active'">
+          Active
+        </button>
+        <button :class="{ active: filter === 'done' }" @click="filter = 'done'">
+          Done
+        </button>
       </div>
 
+      <!-- STATS -->
       <div class="stats">
         <span>Total: {{ totalTodos }}</span>
         <span>Active: {{ activeTodos }}</span>
         <span>Done: {{ doneTodos }}</span>
       </div>
-      <!-- C1-->
+
+      <!-- LOADING / ERROR -->
       <p v-if="store.loading" class="info">Loading tasks...</p>
       <p v-if="store.error" class="error">{{ store.error }}</p>
 
-      <!-- List -->
+      <!-- LIST -->
       <ul class="list">
-        <li v-for="todo in filteredTodos" :key="todo.id" class="item">  <!-- //todo in store.todos  -->
+        <li
+          v-for="todo in filteredTodos"
+          :key="todo.id"
+          class="item"
+        >
 
           <label class="left">
             <input
               type="checkbox"
               :checked="todo.is_done"
               @change="store.toggleTodo(todo)"
+              :disabled="store.loading"
             />
 
             <span :class="{ done: todo.is_done }">
@@ -104,15 +138,15 @@ async function add() {
           </label>
 
           <div class="actions">
-
-            <!-- Optional check icon -->
             <Check v-if="todo.is_done" :size="18" class="done-icon" />
 
-            <!-- Delete button -->
-            <button class="btn-delete" @click="store.deleteTodo(todo.id)">
+            <button
+              class="btn-delete"
+              @click="store.deleteTodo(todo.id)"
+              :disabled="store.loading"
+            >
               <Trash2 :size="18" />
             </button>
-
           </div>
 
         </li>
@@ -214,18 +248,7 @@ async function add() {
   background: transparent;
   border: none;
   color: red;
-  font-size: 18px;
   cursor: pointer;
-}
-
-.info {
-  color: #555;
-  font-size: 14px;
-}
-
-.error {
-  color: red;
-  font-size: 14px;
 }
 
 .actions {
@@ -257,11 +280,26 @@ async function add() {
   background: #d1d5db;
 }
 
+.filters button.active {
+  background: #4f46e5;
+  color: white;
+}
+
 .stats {
   display: flex;
   justify-content: space-between;
   margin-bottom: 15px;
   font-size: 14px;
   color: #555;
+}
+
+.info {
+  color: #555;
+  font-size: 14px;
+}
+
+.error {
+  color: red;
+  font-size: 14px;
 }
 </style>
